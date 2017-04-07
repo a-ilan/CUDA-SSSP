@@ -1,0 +1,7 @@
+input/
+out.txt
+*.o
+sssp
+*.tar
+*.zip
+*.gz
