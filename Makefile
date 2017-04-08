@@ -12,7 +12,7 @@ run111:
 
 
 run2:
-	./sssp --bsize 1024 --bcount 2 --method tpe --input in.txt --output out.txt
+	./sssp --bsize 1024 --bcount 2 --method tpe --input in.txt --output out.txt --sync outcore
 run22:
 	./sssp --bsize 1024 --bcount 2 --method tpe --input input/amazon0312.txt --output out.txt --sync outcore
 run222:

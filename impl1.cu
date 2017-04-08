@@ -16,9 +16,9 @@ __global__ void swap_kernel(int* a, int* b, int n){
         for(int i = 0; i < iter; i++){
                 int id = tid + i*nThreads;
                 if(id < n){
-                        //int temp = a[id];
+                        int temp = a[id];
                         a[id] = b[id];
-                        //b[id] = temp;
+                        b[id] = temp;
                 }
         }
 }
@@ -65,7 +65,7 @@ __global__ void impl1_outcore_kernel(edge* edges, int nEdges, int* distance_cur,
 		int v = edges[i].dest;
 		int w = edges[i].w;
 		if(distance_prev[u] == INF) continue;
-		if(distance_prev[u]+w < distance_prev[v]){
+		if(distance_prev[u]+w < distance_cur[v]){
 			atomicMin(&distance_cur[v], distance_prev[u]+w);
 			*anyChange = 1;
 		}

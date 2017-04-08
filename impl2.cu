@@ -10,7 +10,7 @@ __device__ int min_kernel2(int a, int b){
         return a < b? a : b;
 }
 
-__global__ void swap_kernel2(int* a, int* b, int n){
+__global__ void copy_kernel(int* a, int* b, int n){
         const int tid = threadIdx.x + blockDim.x*blockIdx.x;
         const int nThreads = blockDim.x*gridDim.x;
         const int iter = n%nThreads == 0? n/nThreads : n/nThreads+1;
@@ -18,9 +18,7 @@ __global__ void swap_kernel2(int* a, int* b, int n){
         for(int i = 0; i < iter; i++){
                 int id = tid + i*nThreads;
                 if(id < n){
-                        //int temp = a[id];
                         a[id] = b[id];
-                        //b[id] = temp;
                 }
         }
 }
@@ -69,7 +67,7 @@ __global__ void bellmanford_outcore_kernel(edge* edges, int* distance_cur,int* d
                 int v = edges[i].dest;
                 int w = edges[i].w;
                 if(distance_prev[u] == INF) continue;
-                if(distance_prev[u]+w < distance_prev[v]){
+                if(distance_prev[u]+w < distance_cur[v]){
                         atomicMin(&distance_cur[v], distance_prev[u]+w);
                         changed[v] = 1;
                 }
@@ -272,7 +270,7 @@ void impl2_outcore(int* distance, edge* edges, int nEdges, int n, int blockSize,
 		int left = 0;
 		cudaMemcpyFromSymbol(&left,d_nEdges,sizeof(int));
 		if(left == 0) break;
-		else swap_kernel2<<<blockNum,blockSize>>>(d_distance_prev,d_distance_cur,n);
+		else copy_kernel<<<blockNum,blockSize>>>(d_distance_prev,d_distance_cur,n);
 	}
 	std::cout << "Time " << getTime() << "ms.\n";
 	std::cout << "Iterations " << nIter << "\n";
