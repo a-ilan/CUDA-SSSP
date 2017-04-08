@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "cuda_error_check.cuh"
-#include "utils.hpp"
+#include "utils.cuh"
 
 #include "impl2.cu"
 #include "impl1.cu"
@@ -35,8 +35,8 @@ int main( int argc, char** argv )
 	std::string usage =
 		"\tCommand line arguments:\n\
 			Input file: E.g., --input in.txt\n\
-                        Block size: E.g., --bsize 512\n\
-                        Block count: E.g., --bcount 192\n\
+                        Block size: E.g., --bsize 1024\n\
+                        Block count: E.g., --bcount 2\n\
                         Output path: E.g., --output output.txt\n\
 			Processing method: E.g., --method bmf (bellman-ford), or tpe (to-process-edge)\n\
 			Shared memory usage: E.g., --usesmem yes, or no \n\
@@ -156,11 +156,14 @@ int main( int argc, char** argv )
 		
 		switch(processingMethod){
 		case ProcessingType::Push:
-		    impl1(results,edges,nEdges,nNodes, bsize, bcount);
-		    break;
+			if(syncMethod == InCore)
+				impl1_incore(results,edges,nEdges,nNodes, bsize, bcount);
+			else
+				impl1_outcore(results,edges,nEdges,nNodes, bsize, bcount);
+			break;
 		case ProcessingType::Neighbor:
-		    impl2(results,edges,nEdges,nNodes, bsize, bcount);
-		    break;
+			impl2(results,edges,nEdges,nNodes, bsize, bcount);
+			break;
 		default:
 		    break;
 		}

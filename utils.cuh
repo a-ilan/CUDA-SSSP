@@ -1,5 +1,5 @@
-#ifndef GRAPH_UTILS_HPP
-#define GRAPH_UTILS_HPP
+#ifndef UTILS_CUH
+#define UTILS_CUH
 
 #include <fstream>
 #include <vector>

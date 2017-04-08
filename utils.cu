@@ -4,11 +4,10 @@
 #include <stdio.h>
 #include <iostream>
 
-#include "utils.hpp"
+#include "utils.cuh"
 
 #define SSSP_INF 1073741824
 
-/* sort by destination node */
 void sort_by_dest(edge* edges, int nEdges, vector<initial_vertex> * peeps){
         int index = 0;
         for(int i = 0; i <  peeps->size(); i++){

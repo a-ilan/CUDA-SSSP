@@ -2,9 +2,7 @@
 #include <iostream>
 
 #include "cuda_error_check.cuh"
-#include "utils.hpp"
-
-using namespace std;
+#include "utils.cuh"
 
 __device__ int d_nEdges; //number of edges left after filter
 
