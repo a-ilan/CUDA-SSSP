@@ -10,7 +10,22 @@ __device__ int min_kernel2(int a, int b){
         return a < b? a : b;
 }
 
-__global__ void to_process_kernel(edge* edges, int* distance,int* changed){
+__global__ void swap_kernel2(int* a, int* b, int n){
+        const int tid = threadIdx.x + blockDim.x*blockIdx.x;
+        const int nThreads = blockDim.x*gridDim.x;
+        const int iter = n%nThreads == 0? n/nThreads : n/nThreads+1;
+
+        for(int i = 0; i < iter; i++){
+                int id = tid + i*nThreads;
+                if(id < n){
+                        //int temp = a[id];
+                        a[id] = b[id];
+                        //b[id] = temp;
+                }
+        }
+}
+
+__global__ void bellmanford_incore_kernel(edge* edges, int* distance,int* changed){
 	const int nEdges = d_nEdges;
 	const int idx = blockDim.x*blockIdx.x + threadIdx.x;
 	const int nThreads = blockDim.x*gridDim.x;
@@ -36,6 +51,30 @@ __global__ void to_process_kernel(edge* edges, int* distance,int* changed){
         }
 }
 
+__global__ void bellmanford_outcore_kernel(edge* edges, int* distance_cur,int* distance_prev,int* changed){
+        const int nEdges = d_nEdges;
+        const int idx = blockDim.x*blockIdx.x + threadIdx.x;
+        const int nThreads = blockDim.x*gridDim.x;
+        const int nWarps = nThreads%32 == 0? nThreads/32 : nThreads/32+1;
+        const int lane = idx & 31;
+        const int warpid = idx >> 5;
+
+        int load = nEdges%nWarps == 0? nEdges/nWarps : nEdges/nWarps+1;
+        int beg = load*warpid;
+        int end = min_kernel2(nEdges,beg+load);
+        beg = beg+lane;
+
+        for(int i = beg; i < end; i++){
+                int u = edges[i].src;
+                int v = edges[i].dest;
+                int w = edges[i].w;
+                if(distance_prev[u] == INF) continue;
+                if(distance_prev[u]+w < distance_prev[v]){
+                        atomicMin(&distance_cur[v], distance_prev[u]+w);
+                        changed[v] = 1;
+                }
+        }
+}
 
 __global__ void warp_count_kernel(int* warp_count,edge* edges, int* changed, int nEdges){
 	const int tid = threadIdx.x + blockDim.x*blockIdx.x;
@@ -126,7 +165,7 @@ __global__ void filter_edges_kernel(edge* filtered_edges, edge* all_edges, int* 
 	}
 }
 
-void impl2(int* distance, edge* edges, int nEdges, int n, int blockSize, int blockNum){
+void impl2_incore(int* distance, edge* edges, int nEdges, int n, int blockSize, int blockNum){
 	int nb = n*sizeof(int);
 	int nThreads = blockSize*blockNum;
 	int nWarps = nThreads%32 == 0? nThreads/32 : nThreads/32+1;
@@ -156,12 +195,16 @@ void impl2(int* distance, edge* edges, int nEdges, int n, int blockSize, int blo
 		cudaMemset(d_changed,0,nb);
 		
 		//process stage
-		to_process_kernel<<<blockNum,blockSize>>>(d_filtered_edges,d_distance,d_changed);
+		bellmanford_incore_kernel<<<blockNum,blockSize>>>(d_filtered_edges,d_distance,d_changed);
+		cudaDeviceSynchronize();
 
 		//filter stage
 		warp_count_kernel<<<blockNum,blockSize>>>(d_warp_count,d_edges,d_changed, nEdges);
+		cudaDeviceSynchronize();
 		scan_block_kernel<<<1,nWarps>>>(d_prefix_sum,d_warp_count);
+		cudaDeviceSynchronize();
 		filter_edges_kernel<<<blockNum,blockSize>>>(d_filtered_edges,d_edges,d_prefix_sum,d_warp_count,d_changed,nEdges);
+		cudaDeviceSynchronize();
 	
 		//check if there is any edges left to process
 		int left = 0;
@@ -176,6 +219,70 @@ void impl2(int* distance, edge* edges, int nEdges, int n, int blockSize, int blo
 	cudaFree(d_edges);
 	cudaFree(d_filtered_edges);
 	cudaFree(d_distance);
+	cudaFree(d_warp_count);
+	cudaFree(d_prefix_sum);
+	cudaFree(d_changed);
+}
+
+void impl2_outcore(int* distance, edge* edges, int nEdges, int n, int blockSize, int blockNum){
+	int nb = n*sizeof(int);
+	int nThreads = blockSize*blockNum;
+	int nWarps = nThreads%32 == 0? nThreads/32 : nThreads/32+1;
+
+	edge* d_edges = NULL;
+	edge* d_filtered_edges = NULL;
+	int* d_distance_cur = NULL;
+	int* d_distance_prev = NULL;
+	int* d_warp_count = NULL;
+	int* d_prefix_sum = NULL;
+	int* d_changed = NULL;
+	cudaMalloc((void**)&d_edges,nEdges*sizeof(edge));
+	cudaMalloc((void**)&d_filtered_edges,nEdges*sizeof(edge));
+	cudaMalloc((void**)&d_distance_cur,nb);
+	cudaMalloc((void**)&d_distance_prev,nb);
+	cudaMalloc((void**)&d_warp_count,nWarps*sizeof(int));
+	cudaMalloc((void**)&d_prefix_sum,nWarps*sizeof(int));
+	cudaMalloc((void**)&d_changed,nb);
+	cudaMemcpy(d_edges,edges,nEdges*sizeof(edge),cudaMemcpyHostToDevice);
+	cudaMemcpy(d_filtered_edges,edges,nEdges*sizeof(edge),cudaMemcpyHostToDevice);
+	cudaMemcpy(d_distance_cur,distance,nb,cudaMemcpyHostToDevice);
+	cudaMemcpy(d_distance_prev,distance,nb,cudaMemcpyHostToDevice);
+	cudaMemcpyToSymbol(d_nEdges,&nEdges,sizeof(int));
+
+	int nIter = 0;
+	setTime();
+	for(int i = 0; i < n-1; i++){
+		nIter++;
+		cudaMemset(d_warp_count,0,nWarps*sizeof(int));
+		cudaMemset(d_changed,0,nb);
+
+		//process stage
+		bellmanford_outcore_kernel<<<blockNum,blockSize>>>(d_filtered_edges,d_distance_cur,d_distance_prev,d_changed);
+		cudaDeviceSynchronize();
+
+		//filter stage
+		warp_count_kernel<<<blockNum,blockSize>>>(d_warp_count,d_edges,d_changed, nEdges);
+		cudaDeviceSynchronize();
+		scan_block_kernel<<<1,nWarps>>>(d_prefix_sum,d_warp_count);
+		cudaDeviceSynchronize();
+		filter_edges_kernel<<<blockNum,blockSize>>>(d_filtered_edges,d_edges,d_prefix_sum,d_warp_count,d_changed,nEdges);
+		cudaDeviceSynchronize();
+
+		//check if there is any edges left to process
+		int left = 0;
+		cudaMemcpyFromSymbol(&left,d_nEdges,sizeof(int));
+		if(left == 0) break;
+		else swap_kernel2<<<blockNum,blockSize>>>(d_distance_prev,d_distance_cur,n);
+	}
+	std::cout << "Time " << getTime() << "ms.\n";
+	std::cout << "Iterations " << nIter << "\n";
+
+	cudaMemcpy(distance,d_distance_cur,nb,cudaMemcpyDeviceToHost);
+
+	cudaFree(d_edges);
+	cudaFree(d_filtered_edges);
+	cudaFree(d_distance_cur);
+	cudaFree(d_distance_prev);
 	cudaFree(d_warp_count);
 	cudaFree(d_prefix_sum);
 	cudaFree(d_changed);

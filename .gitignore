@@ -5,3 +5,4 @@ sssp
 *.tar
 *.zip
 *.gz
+.nfs*

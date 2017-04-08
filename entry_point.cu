@@ -12,7 +12,7 @@
 #include "impl1.cu"
 
 enum class ProcessingType {Push, Neighbor, Own, Unknown};
-enum SyncMode {InCore, OutOfCore};
+enum SyncMode {InCore, OutCore};
 enum SyncMode syncMethod;
 enum SmemMode {UseSmem, UseNoSmem};
 enum SmemMode smemMethod;
@@ -52,7 +52,7 @@ int main( int argc, char** argv )
 		long long arbparam = 0;
 		bool nonDirectedGraph = false;		// By default, the graph is directed.
 		ProcessingType processingMethod = ProcessingType::Unknown;
-		syncMethod = OutOfCore;
+		syncMethod = InCore;
 		smemMethod = UseNoSmem;
 		sortMethod = sortDest;
 
@@ -76,7 +76,7 @@ int main( int argc, char** argv )
 				if ( !strcmp(argv[iii+1], "incore") )
 				        syncMethod = InCore;
 				else if ( !strcmp(argv[iii+1], "outcore") )
-    				        syncMethod = OutOfCore;
+    				        syncMethod = OutCore;
 				else{
 					std::cerr << "\n Un-recognized sync parameter value \n\n";
 					return( EXIT_FAILURE );
@@ -162,7 +162,10 @@ int main( int argc, char** argv )
 				impl1_outcore(results,edges,nEdges,nNodes, bsize, bcount);
 			break;
 		case ProcessingType::Neighbor:
-			impl2(results,edges,nEdges,nNodes, bsize, bcount);
+			if(syncMethod == InCore)
+				impl2_incore(results,edges,nEdges,nNodes, bsize, bcount);
+			else
+				impl2_outcore(results,edges,nEdges,nNodes, bsize, bcount);
 			break;
 		default:
 		    break;

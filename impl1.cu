@@ -16,9 +16,9 @@ __global__ void swap_kernel(int* a, int* b, int n){
         for(int i = 0; i < iter; i++){
                 int id = tid + i*nThreads;
                 if(id < n){
-                        int temp = a[id];
+                        //int temp = a[id];
                         a[id] = b[id];
-                        b[id] = temp;
+                        //b[id] = temp;
                 }
         }
 }
@@ -65,7 +65,7 @@ __global__ void impl1_outcore_kernel(edge* edges, int nEdges, int* distance_cur,
 		int v = edges[i].dest;
 		int w = edges[i].w;
 		if(distance_prev[u] == INF) continue;
-		if(distance_prev[u]+w < distance_cur[v]){
+		if(distance_prev[u]+w < distance_prev[v]){
 			atomicMin(&distance_cur[v], distance_prev[u]+w);
 			*anyChange = 1;
 		}
@@ -89,6 +89,7 @@ void impl1_incore(int* results, edge* h_edges, int nEdges, int n, int blockSize,
 		nIter++;
 		cudaMemset(d_anyChange, 0,sizeof(int));
 		impl1_incore_kernel<<<blockNum,blockSize>>>(d_edges,nEdges,d_distance,d_anyChange);
+		cudaDeviceSynchronize();
 	
 		//break from loop if no changes
 		int anyChange = 0;
@@ -125,16 +126,16 @@ void impl1_outcore(int* distance, edge* h_edges, int nEdges, int n, int blockSiz
 		nIter++;
 		cudaMemset(d_anyChange, 0,sizeof(int));
 		impl1_outcore_kernel<<<blockNum,blockSize>>>(d_edges,nEdges,d_distance_cur,d_distance_prev,d_anyChange);
-	
+		cudaDeviceSynchronize();
+
 		//break from loop if no changes
 		int anyChange = 0;
 		cudaMemcpy(&anyChange,d_anyChange, sizeof(int),cudaMemcpyDeviceToHost);
 		if(!anyChange) break;
-
-		swap_kernel<<<blockNum,blockSize>>>(d_distance_cur,d_distance_prev,n);
+		else swap_kernel<<<blockNum,blockSize>>>(d_distance_prev,d_distance_cur,n);
 	}
-	cout << "Time: " << getTime() << "ms\n";
 	cout << "Iterations: " << nIter << "\n";
+	cout << "Time: " << getTime() << "ms\n";
 	
 	cudaMemcpy(distance,d_distance_cur,nb,cudaMemcpyDeviceToHost);
 	
