@@ -11,7 +11,7 @@ RUNNING
 
 The required command line arguments:
  Input file: E.g., --input in.txt
- Output path: E.g., --output output.txt
+ Output path: E.g., --output out.txt
  Block size: E.g., --bsize 1024
  Block count: E.g., --bcount 2
  Processing method: E.g., --method bmf (bellman-ford), or tpe (to-process-edge)
@@ -30,6 +30,7 @@ INPUT GRAPH FILE FORMAT
 
 The graph file should have a list of edges where each line is an edge. Node 0 is assumed to be the starting node.
 Each line should look like this: <source_index> <destination_index> <weight>
+The last value, weight is optional and if not specified, it is assumed to be 1.
 An example graph could be the following:
 0 1 4
 0 2 2

@@ -7,67 +7,59 @@
 __device__ int d_nEdges; //number of edges left after filter
 
 __global__ void copy_kernel(int* a, int* b, int n){
-        const int tid = threadIdx.x + blockDim.x*blockIdx.x;
-        const int nThreads = blockDim.x*gridDim.x;
-        const int iter = n%nThreads == 0? n/nThreads : n/nThreads+1;
+	const int tid = threadIdx.x + blockDim.x*blockIdx.x;
+	const int nThreads = blockDim.x*gridDim.x;
+	const int iter = n%nThreads == 0? n/nThreads : n/nThreads+1;
 
-        for(int i = 0; i < iter; i++){
-                int id = tid + i*nThreads;
-                if(id < n){
-                        a[id] = b[id];
-                }
-        }
+	for(int i = 0; i < iter; i++){
+		int id = tid + i*nThreads;
+		if(id < n){
+			a[id] = b[id];
+		}
+	}
 }
 
 __global__ void bellmanford_incore_kernel(edge* edges, int* distance,int* changed){
 	const int nEdges = d_nEdges;
-	const int idx = blockDim.x*blockIdx.x + threadIdx.x;
+	const int tid = threadIdx.x + blockDim.x*blockIdx.x;
 	const int nThreads = blockDim.x*gridDim.x;
-        const int nWarps = nThreads%32 == 0? nThreads/32 : nThreads/32+1; 
-        const int lane = idx & 31; 
-        const int warpid = idx >> 5;
+	const int iter = nEdges%nThreads == 0? nEdges/nThreads : nEdges/nThreads+1;
 
-        int load = nEdges%nWarps == 0? nEdges/nWarps : nEdges/nWarps+1;
-        int beg = load*warpid;
-        int end = min(nEdges,beg+load);
-        beg = beg+lane;
-
-        for(int i = beg; i < end; i++){
-                int u = edges[i].src;
-                int v = edges[i].dest;
-                int w = edges[i].w;
-		int temp_dist = distance[u]+w;
-		if(distance[u] == INF) continue;
-                if(temp_dist < distance[v]){
-                        atomicMin(&distance[v], temp_dist);
-			changed[v] = 1;
-                }
-        }
+	for(int i = 0; i < iter; i++){
+		int id = tid + i*nThreads;
+		if(id < nEdges){
+			int u = edges[id].src;
+			int v = edges[id].dest;
+			int w = edges[id].w;
+			int temp_dist = distance[u]+w;
+			if(distance[u] == INF) continue;
+			if(temp_dist < distance[v]){
+				atomicMin(&distance[v], temp_dist);
+				changed[v] = 1;
+			}
+		}
+	}
 }
 
 __global__ void bellmanford_outcore_kernel(edge* edges, int* distance_cur,int* distance_prev,int* changed){
         const int nEdges = d_nEdges;
         const int tid = blockDim.x*blockIdx.x + threadIdx.x;
         const int nThreads = blockDim.x*gridDim.x;
-        const int nWarps = nThreads%32 == 0? nThreads/32 : nThreads/32+1;
-        const int lane = tid & 31;
-        const int wid = tid >> 5;
+	const int iter = nEdges%nThreads == 0? nEdges/nThreads : nEdges/nThreads+1;
 
-        int load = nEdges%nWarps == 0? nEdges/nWarps : nEdges/nWarps+1;
-        int beg = load*wid;
-        int end = min(nEdges,beg+load);
-        beg = beg+lane;
-
-        for(int i = beg; i < end; i++){
-                int u = edges[i].src;
-                int v = edges[i].dest;
-                int w = edges[i].w;
-                if(distance_prev[u] == INF) continue;
-                if(distance_prev[u]+w < distance_cur[v]){
-                        atomicMin(&distance_cur[v], distance_prev[u]+w);
-                        changed[v] = 1;
-                }
-        }
+	for(int i = 0; i < iter; i++){
+		int id = tid + i*nThreads;
+		if(id < nEdges){
+                        int u = edges[id].src;
+                        int v = edges[id].dest;
+                        int w = edges[id].w;
+			if(distance_prev[u] == INF) continue;
+			if(distance_prev[u]+w < distance_cur[v]){
+				atomicMin(&distance_cur[v], distance_prev[u]+w);
+				changed[v] = 1;
+			}
+		}
+	}
 }
 
 __global__ void warp_count_kernel(int* warp_count,edge* edges, int* changed, int nEdges){

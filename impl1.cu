@@ -5,41 +5,37 @@
 #include "utils.cuh"
 
 __global__ void swap_kernel(int* a, int* b, int n){
-        const int tid = threadIdx.x + blockDim.x*blockIdx.x;
-        const int nThreads = blockDim.x*gridDim.x;
-        const int iter = n%nThreads == 0? n/nThreads : n/nThreads+1;
+	const int tid = threadIdx.x + blockDim.x*blockIdx.x;
+	const int nThreads = blockDim.x*gridDim.x;
+	const int iter = n%nThreads == 0? n/nThreads : n/nThreads+1;
 
-        for(int i = 0; i < iter; i++){
-                int id = tid + i*nThreads;
-                if(id < n){
-                        int temp = a[id];
-                        a[id] = b[id];
-                        b[id] = temp;
-                }
-        }
+	for(int i = 0; i < iter; i++){
+		int id = tid + i*nThreads;
+		if(id < n){
+			int temp = a[id];
+			a[id] = b[id];
+			b[id] = temp;
+		}
+	}
 }
 
 __global__ void impl1_incore_kernel(edge* edges, int nEdges, int* distance, int* anyChange){
 	const int tid = blockDim.x*blockIdx.x + threadIdx.x;
 	const int nThreads = blockDim.x * gridDim.x;
-	const int nWarps = nThreads%32 == 0? nThreads/32 : nThreads/32+1; //number of warps
-	const int lane = tid & 31; //thread offset within a warp
-	const int wid = tid >> 5;
+	const int iter = nEdges%nThreads == 0? nEdges/nThreads : nEdges/nThreads+1;	
 
-	int load = nEdges%nWarps == 0? nEdges/nWarps : nEdges/nWarps+1;
-	int beg = load*wid;
-	int end = min(nEdges,beg+load);
-	beg = beg+lane;
-
-	for(int i = beg; i < end; i++){
-		int u = edges[i].src;
-		int v = edges[i].dest;
-		int w = edges[i].w;
-		int temp_dist = distance[u]+w;
-		if(distance[u] == INF) continue;
-		if(temp_dist < distance[v]){
-			atomicMin(&distance[v], temp_dist);
-			*anyChange = 1;
+	for(int i = 0; i < iter; i++){
+		int id = tid + i*nThreads;
+		if(id < nEdges){
+			int u = edges[id].src;
+			int v = edges[id].dest;
+			int w = edges[id].w;
+			int temp_dist = distance[u]+w;
+			if(distance[u] == INF) continue;
+			if(temp_dist < distance[v]){
+				atomicMin(&distance[v], temp_dist);
+				*anyChange = 1;
+			}
 		}
 	}
 }
@@ -47,23 +43,19 @@ __global__ void impl1_incore_kernel(edge* edges, int nEdges, int* distance, int*
 __global__ void impl1_outcore_kernel(edge* edges, int nEdges, int* distance_cur, int* distance_prev, int* anyChange){
 	const int tid = blockDim.x*blockIdx.x + threadIdx.x;
 	const int nThreads = blockDim.x * gridDim.x;
-	const int nWarps = nThreads%32 == 0? nThreads/32 : nThreads/32+1; //number of warps
-	const int lane = tid & 31; //thread offset within a warp
-	const int wid = tid >> 5;
+	const int iter = nEdges%nThreads == 0? nEdges/nThreads : nEdges/nThreads+1;	
 
-	int load = nEdges%nWarps == 0? nEdges/nWarps : nEdges/nWarps+1;
-	int beg = load*wid;
-	int end = min(nEdges,beg+load);
-	beg = beg+lane;
-
-	for(int i = beg; i < end; i++){
-		int u = edges[i].src;
-		int v = edges[i].dest;
-		int w = edges[i].w;
-		if(distance_prev[u] == INF) continue;
-		if(distance_prev[u]+w < distance_cur[v]){
-			atomicMin(&distance_cur[v], distance_prev[u]+w);
-			*anyChange = 1;
+	for(int i = 0; i < iter; i++){
+		int id = tid + i*nThreads;
+		if(id < nEdges){
+			int u = edges[id].src;
+			int v = edges[id].dest;
+			int w = edges[id].w;
+			if(distance_prev[u] == INF) continue;
+			if(distance_prev[u]+w < distance_cur[v]){
+				atomicMin(&distance_cur[v], distance_prev[u]+w);
+				*anyChange = 1;
+			}
 		}
 	}
 }
@@ -86,36 +78,33 @@ __device__ void segmented_scan_min_kernel(int* result, int* node){
 __global__ void impl1_outcore_shmem_kernel(edge* edges, int nEdges, int* distance_cur, int* distance_prev, int* anyChange){
         const int tid = blockDim.x*blockIdx.x + threadIdx.x;
         const int nThreads = blockDim.x * gridDim.x;
-	const int nWarps = nThreads%32 == 0? nThreads/32 : nThreads/32+1; //number of warps
-        const int lane = tid & 31; //thread offset within a warp
-        const int wid = tid >> 5;
-
-	int load = nEdges%nWarps == 0? nEdges/nWarps : nEdges/nWarps+1;
-        int beg = load*wid;
-        int end = min(nEdges,beg+load);
-        beg = beg+lane;
+	const int lane = tid & 31;
+	const int iter = nEdges%nThreads == 0? nEdges/nThreads : nEdges/nThreads+1;
 
 	__shared__ int s_node[1024]; //index of each destination node
 	__shared__ int s_distance[1024]; //distance of each dest node
 
-	for(int i = beg; i < end; i++){
-		int u = edges[i].src;
-		int v = edges[i].dest;
-		int w = edges[i].w;
-		s_node[threadIdx.x] = v;
-		if(distance_prev[u] == INF)
-			s_distance[threadIdx.x] = INF;
-		else
-			s_distance[threadIdx.x] = distance_prev[u]+w;
-		__syncthreads();
+	for(int i = 0; i < iter; i++){
+		int id = tid + i*nThreads;
+		if(id < nEdges){
+			int u = edges[id].src;
+			int v = edges[id].dest;
+			int w = edges[id].w;
+			s_node[threadIdx.x] = v;
+			if(distance_prev[u] == INF)
+				s_distance[threadIdx.x] = INF;
+			else
+				s_distance[threadIdx.x] = distance_prev[u]+w;
+			__syncthreads();
 
-		// get the min distance for dest node
-		segmented_scan_min_kernel(s_distance,s_node);
-		if(lane == 31 || s_node[threadIdx.x] != s_node[threadIdx.x+1]){
-			int result = s_distance[threadIdx.x];
-			if(result < distance_cur[v]){
-				atomicMin(&distance_cur[v],result);
-				*anyChange = 1;
+			// get the min distance for dest node
+			segmented_scan_min_kernel(s_distance,s_node);
+			if(lane == 31 || s_node[threadIdx.x] != s_node[threadIdx.x+1]){
+				int result = s_distance[threadIdx.x];
+				if(result < distance_cur[v]){
+					atomicMin(&distance_cur[v],result);
+					*anyChange = 1;
+				}
 			}
 		}
 	}

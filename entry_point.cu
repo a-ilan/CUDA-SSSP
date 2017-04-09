@@ -42,7 +42,7 @@ int main( int argc, char** argv )
 			Processing method: E.g., --method bmf (bellman-ford), or tpe (to-process-edge)\n\
 			Shared memory usage: E.g., --usesmem yes, or no \n\
 			Sync method: E.g., --sync incore, or outcore\n\
-			sorting: E.g., --sort dest, or src\n";
+			Edge Sorting: E.g., --sort dest (by destination), or src (by source)\n";
 
 	try {
 
