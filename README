@@ -1,0 +1,53 @@
+
+This program performs a parallelized single source shortest path (SSSP) algorithm using Cuda. SSSP finds the shortest distance to every node in the graph.
+
+BUILDING
+
+To compile use the command "make sssp"
+
+RUNNING
+
+./sssp --input <in.txt> --output <out.txt> --bsize 1024 --bcount 2 --method <bmf/tpe>
+
+The required command line arguments:
+ Input file: E.g., --input in.txt
+ Output path: E.g., --output output.txt
+ Block size: E.g., --bsize 1024
+ Block count: E.g., --bcount 2
+ Processing method: E.g., --method bmf (bellman-ford), or tpe (to-process-edge)
+
+Optional command line arguments:
+ Shared memory usage: E.g., --usesmem yes, or no
+ Sync method: E.g., --sync incore, or outcore
+ Edge Sorting: E.g., --sort dest (by destination node), or src (by source node)
+
+Default value for optional command line arguments:
+ Shared memory usage: --usesmem no
+ Sync method: --sync outcore
+ Edge Sorting: --sort dest
+
+INPUT GRAPH FILE FORMAT
+
+The graph file should have a list of edges where each line is an edge. Node 0 is assumed to be the starting node.
+Each line should look like this: <source_index> <destination_index> <weight>
+An example graph could be the following:
+0 1 4
+0 2 2
+1 2 5
+1 3 10
+2 4 3
+3 5 11
+4 3 4
+
+OUTPUT FILE FORMET
+
+The output is the shortest distance of every node.
+Each line will look like this: <node_index>: <distance>
+The output file for the example graph above should look like this:
+0: 0
+1: 4
+2: 2
+3: 9
+4: 5
+5: 20
+
