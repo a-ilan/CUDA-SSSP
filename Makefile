@@ -4,7 +4,7 @@ sssp: *.cu
 	$(CC) -std=c++11 utils.cu entry_point.cu -O3 -arch=sm_30 -o sssp
 
 run1:
-	./sssp --bsize 1024 --bcount 2 --method bmf --input in.txt --output out.txt
+	./sssp --bsize 1024 --bcount 2 --method bmf --input in.txt --output out.txt --sync outcore
 run11:
 	./sssp --bsize 1024 --bcount 2 --method bmf --input input/amazon0312.txt --output out.txt --sync outcore
 run111:

@@ -6,10 +6,6 @@
 
 __device__ int d_nEdges; //number of edges left after filter
 
-__device__ int min_kernel2(int a, int b){
-        return a < b? a : b;
-}
-
 __global__ void copy_kernel(int* a, int* b, int n){
         const int tid = threadIdx.x + blockDim.x*blockIdx.x;
         const int nThreads = blockDim.x*gridDim.x;
@@ -33,7 +29,7 @@ __global__ void bellmanford_incore_kernel(edge* edges, int* distance,int* change
 
         int load = nEdges%nWarps == 0? nEdges/nWarps : nEdges/nWarps+1;
         int beg = load*warpid;
-        int end = min_kernel2(nEdges,beg+load);
+        int end = min(nEdges,beg+load);
         beg = beg+lane;
 
         for(int i = beg; i < end; i++){
@@ -51,15 +47,15 @@ __global__ void bellmanford_incore_kernel(edge* edges, int* distance,int* change
 
 __global__ void bellmanford_outcore_kernel(edge* edges, int* distance_cur,int* distance_prev,int* changed){
         const int nEdges = d_nEdges;
-        const int idx = blockDim.x*blockIdx.x + threadIdx.x;
+        const int tid = blockDim.x*blockIdx.x + threadIdx.x;
         const int nThreads = blockDim.x*gridDim.x;
         const int nWarps = nThreads%32 == 0? nThreads/32 : nThreads/32+1;
-        const int lane = idx & 31;
-        const int warpid = idx >> 5;
+        const int lane = tid & 31;
+        const int wid = tid >> 5;
 
         int load = nEdges%nWarps == 0? nEdges/nWarps : nEdges/nWarps+1;
-        int beg = load*warpid;
-        int end = min_kernel2(nEdges,beg+load);
+        int beg = load*wid;
+        int end = min(nEdges,beg+load);
         beg = beg+lane;
 
         for(int i = beg; i < end; i++){

@@ -11,12 +11,13 @@
 #include "impl2.cu"
 #include "impl1.cu"
 
-enum class ProcessingType {Push, Neighbor, Own, Unknown};
+enum ProcessingType {BMF, TPE, Unknown_processing};
+enum ProcessingType processingMethod;
 enum SyncMode {InCore, OutCore};
 enum SyncMode syncMethod;
 enum SmemMode {UseSmem, UseNoSmem};
 enum SmemMode smemMethod;
-enum SortMode {sortDest,sortSrc};
+enum SortMode {SortDest,SortSrc};
 enum SortMode sortMethod;
 
 // Open files safely.
@@ -51,10 +52,10 @@ int main( int argc, char** argv )
 		int bsize = 0, bcount = 0;
 		long long arbparam = 0;
 		bool nonDirectedGraph = false;		// By default, the graph is directed.
-		ProcessingType processingMethod = ProcessingType::Unknown;
-		syncMethod = InCore;
+		processingMethod = Unknown_processing;
+		syncMethod = OutCore;
 		smemMethod = UseNoSmem;
-		sortMethod = sortDest;
+		sortMethod = SortDest;
 
 
 		/********************************
@@ -64,9 +65,9 @@ int main( int argc, char** argv )
 		for( int iii = 1; iii < argc; ++iii )
 			if ( !strcmp(argv[iii], "--method") && iii != argc-1 ) {
 				if ( !strcmp(argv[iii+1], "bmf") )
-				        processingMethod = ProcessingType::Push;
+				        processingMethod = BMF;
 				else if ( !strcmp(argv[iii+1], "tpe") )
-    				        processingMethod = ProcessingType::Neighbor;
+    				        processingMethod = TPE;
 				else{
 					std::cerr << "\n Un-recognized method parameter value \n\n";
 					return( EXIT_FAILURE );
@@ -95,9 +96,9 @@ int main( int argc, char** argv )
 			}
 			else if( !strcmp(argv[iii], "--sort") && iii != argc-1 ) {
 				if ( !strcmp(argv[iii+1], "dest") )
-					sortMethod = sortDest;
+					sortMethod = SortDest;
 				else if(!strcmp(argv[iii+1], "src") )
-					sortMethod = sortSrc;
+					sortMethod = SortSrc;
 				else{
 					std::cerr << "\n Un-recognized sort parameter value \n\n";
 					return( EXIT_FAILURE );
@@ -116,10 +117,20 @@ int main( int argc, char** argv )
 			std::cerr << "Usage: " << usage;
 			throw std::runtime_error("\nAn initialization error happened.\nExiting.");
 		}
-		if( !inputFile.is_open() || processingMethod == ProcessingType::Unknown ) {
+		if( !inputFile.is_open() || processingMethod == Unknown_processing ) {
 			std::cerr << "Usage: " << usage;
 			throw std::runtime_error( "\nAn initialization error happened.\nExiting." );
 		}
+		if(smemMethod == UseSmem && processingMethod != BMF){
+                        cerr << "Shared Memory is only supported for the \"bmf\" method\n";
+			cerr << "Try using --method bmf\n";
+                        throw std::runtime_error("An initialization error happened.\nExiting.");
+                }
+                if(smemMethod == UseSmem && syncMethod == InCore){
+                        cerr << "Shared Memory is not supported for in-core sync method\n";
+			cerr << "Try using --sync outcore\n";
+                        throw std::runtime_error("An initialization error happened.\nExiting.");
+                }
 		if( !outputFile.is_open() )
 			openFileToAccess< std::ofstream >( outputFile, "out.txt" );
 		CUDAErrorCheck( cudaSetDevice( selectedDevice ) );
@@ -145,23 +156,23 @@ int main( int argc, char** argv )
 		int* results = new int[nNodes];
 		std::fill_n(results,nNodes,INF);
 		results[0] = 0;
-
-		if(sortMethod == sortSrc){
+		if(sortMethod == SortSrc){
 			sort_by_src(edges,nEdges);
 		}
+		bool useShmem = smemMethod == UseSmem;
 
 		/********************************
 		 * Process the graph.
 		 ********************************/
 		
 		switch(processingMethod){
-		case ProcessingType::Push:
+		case BMF:
 			if(syncMethod == InCore)
 				impl1_incore(results,edges,nEdges,nNodes, bsize, bcount);
 			else
-				impl1_outcore(results,edges,nEdges,nNodes, bsize, bcount);
+				impl1_outcore(results,edges,nEdges,nNodes, bsize, bcount, useShmem);
 			break;
-		case ProcessingType::Neighbor:
+		case TPE:
 			if(syncMethod == InCore)
 				impl2_incore(results,edges,nEdges,nNodes, bsize, bcount);
 			else
