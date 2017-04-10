@@ -170,7 +170,8 @@ int main( int argc, char** argv )
 		cout << (processingMethod==BMF? "bmf" : "tpe") << " ";
 		cout << (syncMethod==InCore? "in-core" : "out-core") << " implementation, ";
 		cout << "sorting by " << (sortMethod==SortSrc? "src" : "dest") << ", ";
-		cout << (useShmem? "using shared memory" : "not using shared memory") << ".\n";
+		cout << (useShmem? "using shmem" : "no shmem") << ", ";
+		cout << bcount << " blocks, " << bsize << " threads each.\n";
 
 		/********************************
 		 * Process the graph.
