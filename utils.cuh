@@ -29,6 +29,12 @@ public:
 	initial_vertex():nbrs(0){}
 };
 
+class Timer {
+	struct timeval startingTime;
+public:
+	void set();
+	double get();
+};
 
 uint parse_graph(
 	std::ifstream& inFile,
@@ -40,7 +46,5 @@ void sort_by_dest(edge* edges, int nEdges, vector<initial_vertex> * peeps);
 void sort_by_src(edge* edges, int nEdges);
 void testCorrectness(edge* edges, int* results, int nEdges, int nNodes);
 void saveResults(ofstream& outFile, int* solution, int n);
-void setTime();
-double getTime();
 
 #endif	//	PARSE_GRAPH_HPP

@@ -46,9 +46,11 @@ int main( int argc, char** argv )
 
 	try {
 
-		std::ifstream inputFile;
-		std::ofstream outputFile;
+		ifstream inputFile;
+		ofstream outputFile;
+		string inputFileName;
 		int selectedDevice = 0;
+		cudaDeviceProp props;
 		int bsize = 0, bcount = 0;
 		long long arbparam = 0;
 		bool nonDirectedGraph = false;		// By default, the graph is directed.
@@ -104,8 +106,10 @@ int main( int argc, char** argv )
 					return( EXIT_FAILURE );
 				}
 			}
-			else if( !strcmp( argv[iii], "--input" ) && iii != argc-1 /*is not the last one*/)
-				openFileToAccess< std::ifstream >( inputFile, std::string( argv[iii+1] ) );
+			else if( !strcmp( argv[iii], "--input" ) && iii != argc-1 /*is not the last one*/){
+				inputFileName = std::string(argv[iii+1]);
+				openFileToAccess< std::ifstream >( inputFile, inputFileName );
+			}
 			else if( !strcmp( argv[iii], "--output" ) && iii != argc-1 /*is not the last one*/)
 				openFileToAccess< std::ofstream >( outputFile, std::string( argv[iii+1] ) );
 			else if( !strcmp( argv[iii], "--bsize" ) && iii != argc-1 /*is not the last one*/)
@@ -134,25 +138,26 @@ int main( int argc, char** argv )
 		if( !outputFile.is_open() )
 			openFileToAccess< std::ofstream >( outputFile, "out.txt" );
 		CUDAErrorCheck( cudaSetDevice( selectedDevice ) );
-		std::cout << "Device with ID " << selectedDevice << " is selected to process the graph.\n";
-
+        	cudaGetDeviceProperties(&props, selectedDevice);
+		char* deviceName = props.name;
+		//cout << "Selected device ID: " << selectedDevice << ", device name: " << deviceName << endl;
 
 		/********************************
 		 * Read the input graph file.
 		 ********************************/
 
-		std::cout << "Collecting the input graph ...\n";
+		//std::cout << "Collecting the input graph ...\n";
 		std::vector<initial_vertex> parsedGraph( 0 );
 		uint nEdges = parse_graph(
 				inputFile,		// Input file.
 				parsedGraph,	// The parsed graph.
 				arbparam,
 				nonDirectedGraph );		// Arbitrary user-provided parameter.
-		std::cout << "Input graph collected with " << parsedGraph.size() << " vertices and " << nEdges << " edges.\n";
+		int nNodes = parsedGraph.size();
+		cout << "Input graph: " << inputFileName << ", nodes: " << nNodes << ", edges: " << nEdges << endl;
 
 		edge* edges = new edge[nEdges];
 		sort_by_dest(edges,nEdges,&parsedGraph);
-		int nNodes = parsedGraph.size();
 		int* results = new int[nNodes];
 		std::fill_n(results,nNodes,INF);
 		results[0] = 0;
@@ -161,6 +166,12 @@ int main( int argc, char** argv )
 		}
 		bool useShmem = smemMethod == UseSmem;
 
+		cout << "Configurations: ";
+		cout << (processingMethod==BMF? "bmf" : "tpe") << " ";
+		cout << (syncMethod==InCore? "in-core" : "out-core") << " implementation, ";
+		cout << "sorting by " << (sortMethod==SortSrc? "src" : "dest") << ", ";
+		cout << (useShmem? "using shared memory" : "not using shared memory") << ".\n";
+
 		/********************************
 		 * Process the graph.
 		 ********************************/
@@ -168,15 +179,15 @@ int main( int argc, char** argv )
 		switch(processingMethod){
 		case BMF:
 			if(syncMethod == InCore)
-				impl1_incore(results,edges,nEdges,nNodes, bsize, bcount);
+				impl1_incore(results,edges,nEdges,nNodes, bsize, bcount, deviceName);
 			else
-				impl1_outcore(results,edges,nEdges,nNodes, bsize, bcount, useShmem);
+				impl1_outcore(results,edges,nEdges,nNodes, bsize, bcount, useShmem, deviceName);
 			break;
 		case TPE:
 			if(syncMethod == InCore)
-				impl2_incore(results,edges,nEdges,nNodes, bsize, bcount);
+				impl2_incore(results,edges,nEdges,nNodes, bsize, bcount,deviceName);
 			else
-				impl2_outcore(results,edges,nEdges,nNodes, bsize, bcount);
+				impl2_outcore(results,edges,nEdges,nNodes, bsize, bcount,deviceName);
 			break;
 		default:
 		    break;
@@ -191,7 +202,7 @@ int main( int argc, char** argv )
 		 ********************************/
 
 		CUDAErrorCheck( cudaDeviceReset() );
-		std::cout << "Done.\n";
+		//std::cout << "Done.\n";
 		return( EXIT_SUCCESS );
 
 	}

@@ -110,7 +110,7 @@ __global__ void impl1_outcore_shmem_kernel(edge* edges, int nEdges, int* distanc
 	}
 }
 
-void impl1_incore(int* results, edge* h_edges, int nEdges, int n, int blockSize, int blockNum){
+void impl1_incore(int* results, edge* h_edges, int nEdges, int n, int blockSize, int blockNum, char* deviceName){
 	int nb = n*sizeof(int);
 	int* d_anyChange = NULL;
 	edge* d_edges = NULL;
@@ -122,20 +122,23 @@ void impl1_incore(int* results, edge* h_edges, int nEdges, int n, int blockSize,
 	cudaMemcpy(d_distance,results,nb,cudaMemcpyHostToDevice);
 
 	int nIter = 0;
-    	setTime();
+	Timer timer;
+	double time = 0.0; 
 	for(int i = 0; i < n-1; i++){
 		nIter++;
 		cudaMemset(d_anyChange, 0,sizeof(int));
+		timer.set();
 		impl1_incore_kernel<<<blockNum,blockSize>>>(d_edges,nEdges,d_distance,d_anyChange);
 		cudaDeviceSynchronize();
+		time += timer.get();
 	
 		//break from loop if no changes
 		int anyChange = 0;
 		cudaMemcpy(&anyChange,d_anyChange, sizeof(int),cudaMemcpyDeviceToHost);
 		if(!anyChange) break;
 	}
-	cout << "Time: " << getTime() << "ms\n";
-	cout << "Iterations: " << nIter << "\n";
+	cout << "The total computation kernel time on GPU " << deviceName << " is " << time << " milli-seconds\n";
+	cout << "Number of iterations: " << nIter << ", average computation time: " << (time/nIter) << " milli-seconds\n";
 	
 	cudaMemcpy(results,d_distance,nb,cudaMemcpyDeviceToHost);
 	
@@ -144,7 +147,7 @@ void impl1_incore(int* results, edge* h_edges, int nEdges, int n, int blockSize,
 	cudaFree(d_anyChange);
 }
 
-void impl1_outcore(int* distance, edge* h_edges, int nEdges, int n, int blockSize, int blockNum, bool useShmem){
+void impl1_outcore(int* distance, edge* h_edges, int nEdges, int n, int blockSize, int blockNum, bool useShmem, char* deviceName){
 	int nb = n*sizeof(int);
 	int* d_anyChange = NULL;
 	edge* d_edges = NULL;
@@ -159,15 +162,18 @@ void impl1_outcore(int* distance, edge* h_edges, int nEdges, int n, int blockSiz
 	cudaMemcpy(d_distance_prev,distance,nb,cudaMemcpyHostToDevice);
 
 	int nIter = 0;
-    	setTime();
+    	Timer timer;
+	double time = 0.0;
 	for(int i = 0; i < n-1; i++){
 		nIter++;
 		cudaMemset(d_anyChange, 0,sizeof(int));
+		timer.set();
 		if(useShmem)
 			impl1_outcore_shmem_kernel<<<blockNum,blockSize>>>(d_edges,nEdges,d_distance_cur,d_distance_prev,d_anyChange);
 		else
 			impl1_outcore_kernel<<<blockNum,blockSize>>>(d_edges,nEdges,d_distance_cur,d_distance_prev,d_anyChange);
 		cudaDeviceSynchronize();
+		time += timer.get();
 
 		//break from loop if no changes
 		int anyChange = 0;
@@ -175,8 +181,8 @@ void impl1_outcore(int* distance, edge* h_edges, int nEdges, int n, int blockSiz
 		if(!anyChange) break;
 		else swap_kernel<<<blockNum,blockSize>>>(d_distance_prev,d_distance_cur,n);
 	}
-	cout << "Iterations: " << nIter << "\n";
-	cout << "Time: " << getTime() << "ms\n";
+	cout << "The total computation kernel time on GPU " << deviceName << " is " << time << " milli-seconds\n";
+	cout << "Number of iterations: " << nIter << ", average computation time: " << (time/nIter) << " milli-seconds\n";
 	
 	cudaMemcpy(distance,d_distance_cur,nb,cudaMemcpyDeviceToHost);
 	

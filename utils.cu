@@ -172,16 +172,14 @@ uint parse_graph(
 }
 
 
-struct timeval StartingTime;
-
-void setTime(){
-	gettimeofday( &StartingTime, NULL );
+void Timer::set(){
+	gettimeofday( &startingTime, NULL );
 }
 
-double getTime(){
-	struct timeval PausingTime, ElapsedTime;
-	gettimeofday( &PausingTime, NULL );
-	timersub(&PausingTime, &StartingTime, &ElapsedTime);
-	return ElapsedTime.tv_sec*1000.0+ElapsedTime.tv_usec/1000.0;	// Returning in milliseconds.
+double Timer::get(){
+	struct timeval pausingTime, elapsedTime;
+	gettimeofday( &pausingTime, NULL );
+	timersub(&pausingTime, &startingTime, &elapsedTime);
+	return elapsedTime.tv_sec*1000.0+elapsedTime.tv_usec/1000.0;	// Returning in milliseconds.
 }
 

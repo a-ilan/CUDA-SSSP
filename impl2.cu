@@ -151,7 +151,7 @@ __global__ void filter_edges_kernel(edge* filtered_edges, edge* all_edges, int* 
 	}
 }
 
-void impl2_incore(int* distance, edge* edges, int nEdges, int n, int blockSize, int blockNum){
+void impl2_incore(int* distance, edge* edges, int nEdges, int n, int blockSize, int blockNum, char* deviceName){
 	int nb = n*sizeof(int);
 	int nThreads = blockSize*blockNum;
 	int nWarps = nThreads%32 == 0? nThreads/32 : nThreads/32+1;
@@ -174,31 +174,38 @@ void impl2_incore(int* distance, edge* edges, int nEdges, int n, int blockSize, 
 	cudaMemcpyToSymbol(d_nEdges,&nEdges,sizeof(int));	
 	
 	int nIter = 0;
-    	setTime();
+	Timer timer;
+	double computation_time = 0.0;
+	double filtering_time = 0.0;
 	for(int i = 0; i < n-1; i++){
 		nIter++;
 		cudaMemset(d_warp_count,0,nWarps*sizeof(int));
 		cudaMemset(d_changed,0,nb);
 		
 		//process stage
+		timer.set();
 		bellmanford_incore_kernel<<<blockNum,blockSize>>>(d_filtered_edges,d_distance,d_changed);
 		cudaDeviceSynchronize();
+		computation_time += timer.get();
 
 		//filter stage
+		timer.set();
 		warp_count_kernel<<<blockNum,blockSize>>>(d_warp_count,d_edges,d_changed, nEdges);
 		cudaDeviceSynchronize();
 		scan_block_kernel<<<1,nWarps>>>(d_prefix_sum,d_warp_count);
 		cudaDeviceSynchronize();
 		filter_edges_kernel<<<blockNum,blockSize>>>(d_filtered_edges,d_edges,d_prefix_sum,d_warp_count,d_changed,nEdges);
 		cudaDeviceSynchronize();
+		filtering_time += timer.get();
 	
 		//check if there is any edges left to process
 		int left = 0;
 		cudaMemcpyFromSymbol(&left,d_nEdges,sizeof(int));	
 		if(left == 0) break;
 	}
-	std::cout << "Time " << getTime() << "ms.\n";
-	std::cout << "Iterations " << nIter << "\n";
+	cout << "The total computation kernel time on GPU " << deviceName << " is " << computation_time << " milli-seconds\n";
+	cout << "The total filtering kernel time on GPU " << deviceName << " is " << filtering_time << " milli-seconds\n";
+	cout << "Number of iterations: " << nIter << ", average computation time: " << (computation_time/nIter) << " milli-seconds\n";
 
 	cudaMemcpy(distance,d_distance,nb,cudaMemcpyDeviceToHost);
 	
@@ -210,7 +217,7 @@ void impl2_incore(int* distance, edge* edges, int nEdges, int n, int blockSize, 
 	cudaFree(d_changed);
 }
 
-void impl2_outcore(int* distance, edge* edges, int nEdges, int n, int blockSize, int blockNum){
+void impl2_outcore(int* distance, edge* edges, int nEdges, int n, int blockSize, int blockNum, char* deviceName){
 	int nb = n*sizeof(int);
 	int nThreads = blockSize*blockNum;
 	int nWarps = nThreads%32 == 0? nThreads/32 : nThreads/32+1;
@@ -236,23 +243,29 @@ void impl2_outcore(int* distance, edge* edges, int nEdges, int n, int blockSize,
 	cudaMemcpyToSymbol(d_nEdges,&nEdges,sizeof(int));
 
 	int nIter = 0;
-	setTime();
+	Timer timer;
+	double computation_time = 0.0;
+	double filtering_time = 0.0;
 	for(int i = 0; i < n-1; i++){
 		nIter++;
 		cudaMemset(d_warp_count,0,nWarps*sizeof(int));
 		cudaMemset(d_changed,0,nb);
 
 		//process stage
+		timer.set();
 		bellmanford_outcore_kernel<<<blockNum,blockSize>>>(d_filtered_edges,d_distance_cur,d_distance_prev,d_changed);
 		cudaDeviceSynchronize();
+		computation_time += timer.get();
 
 		//filter stage
+		timer.set();
 		warp_count_kernel<<<blockNum,blockSize>>>(d_warp_count,d_edges,d_changed, nEdges);
 		cudaDeviceSynchronize();
 		scan_block_kernel<<<1,nWarps>>>(d_prefix_sum,d_warp_count);
 		cudaDeviceSynchronize();
 		filter_edges_kernel<<<blockNum,blockSize>>>(d_filtered_edges,d_edges,d_prefix_sum,d_warp_count,d_changed,nEdges);
 		cudaDeviceSynchronize();
+		filtering_time += timer.get();
 
 		//check if there is any edges left to process
 		int left = 0;
@@ -260,8 +273,9 @@ void impl2_outcore(int* distance, edge* edges, int nEdges, int n, int blockSize,
 		if(left == 0) break;
 		else copy_kernel<<<blockNum,blockSize>>>(d_distance_prev,d_distance_cur,n);
 	}
-	std::cout << "Time " << getTime() << "ms.\n";
-	std::cout << "Iterations " << nIter << "\n";
+	cout << "The total computation kernel time on GPU " << deviceName << " is " << computation_time << " milli-seconds\n";
+	cout << "The total filtering kernel time on GPU " << deviceName << " is " << filtering_time << " milli-seconds\n";
+	cout << "Number of iterations: " << nIter << ", average computation time: " << (computation_time/nIter) << " milli-seconds\n";
 
 	cudaMemcpy(distance,d_distance_cur,nb,cudaMemcpyDeviceToHost);
 
