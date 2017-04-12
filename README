@@ -1,9 +1,10 @@
 
-This program performs a parallelized single source shortest path (SSSP) algorithm using Cuda. SSSP finds the shortest distance to every node in the graph.
+This program performs a parallelized single source shortest path (SSSP) algorithm using CUDA. SSSP finds the shortest distance to every node in the graph.
 
 BUILDING
 
-To compile use the command "make sssp"
+To compile, use the command "make sssp".
+Note that you need to install the CUDA compiler, "nvcc".
 
 RUNNING
 

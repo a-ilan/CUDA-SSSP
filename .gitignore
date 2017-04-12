@@ -1,8 +1,10 @@
 input/
+output/
 out.txt
 *.o
 sssp
 *.tar
 *.zip
 *.gz
+*.tgz
 .nfs*

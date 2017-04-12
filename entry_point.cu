@@ -36,9 +36,9 @@ int main( int argc, char** argv )
 	std::string usage =
 		"\tCommand line arguments:\n\
 			Input file: E.g., --input in.txt\n\
+                        Output path: E.g., --output out.txt\n\
                         Block size: E.g., --bsize 1024\n\
                         Block count: E.g., --bcount 2\n\
-                        Output path: E.g., --output output.txt\n\
 			Processing method: E.g., --method bmf (bellman-ford), or tpe (to-process-edge)\n\
 			Shared memory usage: E.g., --usesmem yes, or no \n\
 			Sync method: E.g., --sync incore, or outcore\n\
@@ -146,7 +146,6 @@ int main( int argc, char** argv )
 		 * Read the input graph file.
 		 ********************************/
 
-		//std::cout << "Collecting the input graph ...\n";
 		std::vector<initial_vertex> parsedGraph( 0 );
 		uint nEdges = parse_graph(
 				inputFile,		// Input file.
@@ -203,7 +202,6 @@ int main( int argc, char** argv )
 		 ********************************/
 
 		CUDAErrorCheck( cudaDeviceReset() );
-		//std::cout << "Done.\n";
 		return( EXIT_SUCCESS );
 
 	}

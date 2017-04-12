@@ -5,3 +5,10 @@ sssp: *.cu
 
 clean:
 	rm -f *.o sssp
+
+tar:
+	tar -cvzf sssp_gpu.tgz *.cu *.cuh *.pdf README Makefile
+
+untar:
+	tar -xvzf sssp_gpu.tgz
+
